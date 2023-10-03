@@ -17,6 +17,11 @@ func check(err error) {
 	}
 }
 
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8) {
+	results := medianFilter(startY, endY, startX, endX, data)
+	out <- results
+}
+
 // makeMatrix makes and returns a 2D slice with the given dimensions.
 func makeMatrix(height, width int) [][]uint8 {
 	matrix := make([][]uint8, height)
@@ -114,11 +119,21 @@ func filter(filepathIn, filepathOut string, threads int) {
 
 	immutableData := makeImmutableMatrix(getPixelData(img))
 	var newPixelData [][]uint8
-	
+
 	if threads == 1 {
 		newPixelData = medianFilter(0, height, 0, width, immutableData)
 	} else {
-		panic("TODO Implement me")
+		chans := make([]chan [][]uint8, threads)
+		for i := 0; i < threads; i++ {
+			chans[i] = make(chan [][]uint8)
+			a := i * (height / threads)
+			b := (i + 1) * (height / threads)
+			go worker(a, b, 0, width, immutableData, chans[i])
+		}
+		for i := 0; i < threads; i++ {
+			receiver := <-chans[i]
+			newPixelData = append(newPixelData, receiver...)
+		}
 	}
 
 	imout := image.NewGray(image.Rect(0, 0, width, height))
